@@ -5,43 +5,51 @@
 
 module Tree
   ( HtmlNode (..),
-    Element (..),
-    Attr (..),
+    HtmlElement (..),
+    HtmlAttr (..),
     MetaNode (..),
-    MaybeMeta (..),
+    EitherMeta (..),
+    PyVal (..),
+    PyIdent,
   )
 where
 
 import Data.Text qualified as T
 
 data HtmlNode
-  = ElementNode Element
+  = ElementNode HtmlElement
   | TextNode T.Text
   deriving (Eq, Show)
 
-data Element = Element
-  { eName :: MaybeMeta T.Text,
-    eAttrs :: [MaybeMeta Attr],
-    eChildren :: [MaybeMeta HtmlNode],
+data HtmlElement = HtmlElement
+  { eName :: EitherMeta T.Text,
+    eAttrs :: [EitherMeta HtmlAttr],
+    eChildren :: [EitherMeta HtmlNode],
     eIsVoid :: Bool
   }
   deriving (Eq, Show)
 
-data Attr = Attr T.Text T.Text
+data HtmlAttr = HtmlAttr T.Text T.Text
   deriving (Eq, Show)
 
-data MaybeMeta a
+data EitherMeta a
   = Meta MetaNode
   | Node a
   deriving (Eq, Show)
 
 data MetaNode
-  = --          name
-    TemplateTag T.Text
-  | --            name
-    TemplateBlock T.Text
-  | --          contents
-    TemplateVar T.Text
+  = TemplateTag PyIdent
+  | TemplateBlock PyIdent
+  | TemplateVar PyVal
+  | TemplateFilter PyVal PyVal (Maybe PyVal)
   | BlockComment T.Text
   | LineComment T.Text
+  deriving (Eq, Show)
+
+type PyIdent = T.Text
+
+data PyVal
+  = PyVar PyIdent
+  | PyGetAttr PyVal PyVal
+  | PyString T.Text
   deriving (Eq, Show)
