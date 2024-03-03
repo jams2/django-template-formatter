@@ -38,7 +38,9 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring ==0.12.*
+    , data-default ==0.7.*
     , megaparsec >=9.6.1 && <10
+    , parser-combinators ==1.3.0
     , text ==2.*
   default-language: Haskell2010
 
@@ -54,8 +56,10 @@ executable django-template-formatter-exe
   build-depends:
       base >=4.7 && <5
     , bytestring ==0.12.*
+    , data-default ==0.7.*
     , django-template-formatter
     , megaparsec >=9.6.1 && <10
+    , parser-combinators ==1.3.0
     , text ==2.*
   default-language: Haskell2010
 
@@ -63,6 +67,7 @@ test-suite django-template-formatter-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      ParserSpec
       Paths_django_template_formatter
   autogen-modules:
       Paths_django_template_formatter
@@ -72,7 +77,10 @@ test-suite django-template-formatter-test
   build-depends:
       base >=4.7 && <5
     , bytestring ==0.12.*
+    , data-default ==0.7.*
     , django-template-formatter
+    , hspec
     , megaparsec >=9.6.1 && <10
+    , parser-combinators ==1.3.0
     , text ==2.*
   default-language: Haskell2010
