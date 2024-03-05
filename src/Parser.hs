@@ -12,11 +12,14 @@ module Parser
     pyString,
     templateVar,
     htmlVoidElement,
+    metaNode,
+    quotedValues,
+    quotedValue,
   )
 where
 
+import Control.Applicative.Combinators qualified as C
 import Data.Char (isAlpha, isAscii, isDigit, isSpace)
-import Data.Default
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as T
 import Data.Void
@@ -91,9 +94,7 @@ pyVal :: Parser PyVal
 pyVal = pyRef <|> pyString
 
 templateVar :: Parser MetaNode
-templateVar =
-  lexeme $
-    TemplateVar <$> ("{{" *> hspace *> pyVal <* hspace <* "}}")
+templateVar = TemplateVar <$> ("{{" *> hspace *> pyVal <* hspace <* "}}")
 
 voidIdent :: Parser T.Text
 voidIdent =
@@ -114,6 +115,11 @@ voidIdent =
       <|> string' "keygen"
       <|> string' "source"
       <|> string' "command"
+
+maybeMetaAttrName :: Parser (EitherMeta T.Text)
+maybeMetaAttrName =
+  ((Node <$> attrName) <|> (Meta <$> metaNode))
+    <?> "HTML attribute name or template node"
 
 attrName :: Parser T.Text
 attrName = lexeme $ T.pack <$> some (satisfy attrNameChar)
@@ -136,11 +142,18 @@ attrEq = lexeme $ string "="
 unquotedAttr :: Parser HtmlAttr
 unquotedAttr =
   ( lexeme $
-      UnquotedAttr <$> attrName <* attrEq <*> unquotedValue
+      UnquotedAttr <$> name <* attrEq <*> unquotedValue
   )
     <?> "unquoted element attribute"
   where
-    unquotedValue = lexeme $ T.pack <$> some (satisfy unquotedValueChar)
+    name = maybeMetaAttrName <?> "unquoted attribute name"
+    unquotedValue =
+      lexeme $
+        ( ( (Node . T.pack <$> some (satisfy unquotedValueChar))
+              <|> (Meta <$> metaNode)
+          )
+            <?> "unquoted attribute value"
+        )
     unquotedValueChar c =
       not (isSpace c)
         && c /= '"'
@@ -150,12 +163,39 @@ unquotedAttr =
         && c /= '>'
         && c /= '`'
 
+quoteMark :: Parser QuoteType
+quoteMark = string "'" *> pure SingleQuote <|> string "\"" *> pure DoubleQuote
+
+quoteParser :: QuoteType -> Parser T.Text
+quoteParser SingleQuote = string "'"
+quoteParser DoubleQuote = string "\""
+
+quotedValues :: Parser T.Text -> Parser [EitherMeta T.Text]
+quotedValues delim = do
+  maybeEnd <- C.optional delim
+  case maybeEnd of
+    Just _ -> return []
+    Nothing -> do
+      (chars, end) <- manyTill_ L.charLiteral (eitherMeta delim)
+      return $ case chars of
+        [] -> end
+        toks -> Node (T.pack toks) : end
+  where
+    eitherMeta :: Parser a -> Parser [EitherMeta T.Text]
+    eitherMeta a = pure . Meta <$> try metaNode_ <|> lookAhead a *> pure []
+
+quotedValue :: Parser QuotedValue
+quotedValue = do
+  delim <- quoteMark
+  values <- many $ quotedValues (quoteParser delim)
+  return $ QuotedValue delim (concat values)
+
 quotedAttr :: Parser HtmlAttr
 quotedAttr =
   ( lexeme $ do
-      name <- attrName
+      name <- maybeMetaAttrName
       _ <- attrEq
-      value <- stringLiteral
+      value <- quotedValue
       return $ QuotedAttr name value
   )
     <?> "quoted element attribute"
@@ -168,13 +208,16 @@ htmlAttr =
 metaNode :: Parser MetaNode
 metaNode = lexeme templateVar <?> "meta node"
 
+metaNode_ :: Parser MetaNode
+metaNode_ = templateVar <?> "meta node"
+
 elementAttrs :: Parser [EitherMeta HtmlAttr]
 elementAttrs = many $ (Meta <$> metaNode) <|> (Node <$> htmlAttr)
 
-htmlVoidElement :: Parser HtmlElement
+htmlVoidElement :: Parser HtmlVoidElement
 htmlVoidElement = lexeme $ do
   _ <- lexeme $ string "<"
-  name <- voidIdent <?> "void element name"
+  name <- ((Node <$> voidIdent) <|> (Meta <$> metaNode)) <?> "void element name"
   attrs <- elementAttrs <?> "void element attributes"
   _ <- lexeme $ string ">" <|> string "/>"
-  return $ def {eName = Node name, eAttrs = attrs, eIsVoid = True}
+  return $ HtmlVoidElement {voidElementName = name, voidElementAttrs = attrs}

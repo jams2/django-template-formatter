@@ -5,8 +5,12 @@
 
 module Tree
   ( HtmlNode (..),
-    HtmlElement (..),
+    HtmlVoidElement (..),
+    HtmlElementOpener (..),
+    HtmlElementCloser (..),
     HtmlAttr (..),
+    QuoteType (..),
+    QuotedValue (..),
     MetaNode (..),
     EitherMeta (..),
     PyVal (..),
@@ -14,34 +18,42 @@ module Tree
   )
 where
 
-import Data.Default
 import Data.Text qualified as T
 
 data HtmlNode
-  = ElementNode HtmlElement
+  = VoidNode HtmlVoidElement
+  | OpenerNode HtmlElementOpener
+  | CloserNode HtmlElementCloser
   | TextNode T.Text
   deriving (Eq, Show)
 
-data HtmlElement = HtmlElement
-  { eName :: EitherMeta T.Text,
-    eAttrs :: [EitherMeta HtmlAttr],
-    eChildren :: [EitherMeta HtmlNode],
-    eIsVoid :: Bool
+data HtmlVoidElement = HtmlVoidElement
+  { voidElementName :: EitherMeta T.Text,
+    voidElementAttrs :: [EitherMeta HtmlAttr]
   }
   deriving (Eq, Show)
 
-instance Default HtmlElement where
-  def =
-    HtmlElement
-      { eName = Node "",
-        eAttrs = [],
-        eChildren = [],
-        eIsVoid = False
-      }
+data HtmlElementOpener = HtmlElementOpener
+  { openerName :: EitherMeta T.Text,
+    openerAttrs :: [EitherMeta HtmlAttr]
+  }
+  deriving (Eq, Show)
+
+data HtmlElementCloser = HtmlElementCloser
+  { closerName :: EitherMeta T.Text,
+    closerAttrs :: [EitherMeta HtmlAttr]
+  }
+  deriving (Eq, Show)
+
+data QuoteType = SingleQuote | DoubleQuote
+  deriving (Eq, Show)
+
+data QuotedValue = QuotedValue QuoteType [EitherMeta T.Text]
+  deriving (Eq, Show)
 
 data HtmlAttr
-  = QuotedAttr T.Text T.Text
-  | UnquotedAttr T.Text T.Text
+  = QuotedAttr (EitherMeta T.Text) QuotedValue
+  | UnquotedAttr (EitherMeta T.Text) (EitherMeta T.Text)
   | EmptyAttr T.Text
   deriving (Eq, Show)
 
