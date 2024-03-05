@@ -15,6 +15,7 @@ module Parser
     metaNode,
     quotedValues,
     quotedValue,
+    eitherMeta,
   )
 where
 
@@ -33,11 +34,6 @@ type Parser = Parsec Void T.Text
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
-
-data TwoOrMore a = TwoOrMore a a [a]
-
-instance Functor TwoOrMore where
-  fmap f (TwoOrMore a b rest) = TwoOrMore (f a) (f b) (fmap f rest)
 
 pyIndex :: Parser T.Text
 pyIndex = lexeme $ takeWhile1P (Just "digit") isDigit
@@ -116,10 +112,12 @@ voidIdent =
       <|> string' "source"
       <|> string' "command"
 
-maybeMetaAttrName :: Parser (EitherMeta T.Text)
-maybeMetaAttrName =
-  ((Node <$> attrName) <|> (Meta <$> metaNode))
-    <?> "HTML attribute name or template node"
+eitherMeta :: Parser a -> Parser (EitherMeta a)
+eitherMeta p = Meta <$> (try metaNode) <|> Node <$> p
+
+eitherMetaAttrName :: Parser (EitherMeta T.Text)
+eitherMetaAttrName =
+  eitherMeta attrName <?> "HTML attribute name or template node"
 
 attrName :: Parser T.Text
 attrName = lexeme $ T.pack <$> some (satisfy attrNameChar)
@@ -146,14 +144,11 @@ unquotedAttr =
   )
     <?> "unquoted element attribute"
   where
-    name = maybeMetaAttrName <?> "unquoted attribute name"
+    name = eitherMetaAttrName <?> "unquoted attribute name"
     unquotedValue =
       lexeme $
-        ( ( (Node . T.pack <$> some (satisfy unquotedValueChar))
-              <|> (Meta <$> metaNode)
-          )
-            <?> "unquoted attribute value"
-        )
+        (eitherMeta concreteValue <?> "unquoted attribute value")
+    concreteValue = T.pack <$> some (satisfy unquotedValueChar)
     unquotedValueChar c =
       not (isSpace c)
         && c /= '"'
@@ -176,13 +171,13 @@ quotedValues delim = do
   case maybeEnd of
     Just _ -> return []
     Nothing -> do
-      (chars, end) <- manyTill_ L.charLiteral (eitherMeta delim)
+      (chars, end) <- manyTill_ L.charLiteral (eitherMeta' delim)
       return $ case chars of
         [] -> end
         toks -> Node (T.pack toks) : end
   where
-    eitherMeta :: Parser a -> Parser [EitherMeta T.Text]
-    eitherMeta a = pure . Meta <$> try metaNode_ <|> lookAhead a *> pure []
+    eitherMeta' :: Parser T.Text -> Parser [EitherMeta T.Text]
+    eitherMeta' a = pure . Meta <$> try metaNode_ <|> lookAhead a *> pure []
 
 quotedValue :: Parser QuotedValue
 quotedValue = do
@@ -193,7 +188,7 @@ quotedValue = do
 quotedAttr :: Parser HtmlAttr
 quotedAttr =
   ( lexeme $ do
-      name <- maybeMetaAttrName
+      name <- eitherMetaAttrName
       _ <- attrEq
       value <- quotedValue
       return $ QuotedAttr name value
@@ -212,12 +207,12 @@ metaNode_ :: Parser MetaNode
 metaNode_ = templateVar <?> "meta node"
 
 elementAttrs :: Parser [EitherMeta HtmlAttr]
-elementAttrs = many $ (Meta <$> metaNode) <|> (Node <$> htmlAttr)
+elementAttrs = many $ eitherMeta htmlAttr
 
 htmlVoidElement :: Parser HtmlVoidElement
 htmlVoidElement = lexeme $ do
   _ <- lexeme $ string "<"
-  name <- ((Node <$> voidIdent) <|> (Meta <$> metaNode)) <?> "void element name"
+  name <- eitherMeta voidIdent <?> "void element name"
   attrs <- elementAttrs <?> "void element attributes"
   _ <- lexeme $ string ">" <|> string "/>"
   return $ HtmlVoidElement {voidElementName = name, voidElementAttrs = attrs}
