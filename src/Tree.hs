@@ -52,7 +52,7 @@ data QuotedValue = QuotedValue QuoteType [EitherMeta T.Text]
   deriving (Eq, Show)
 
 data HtmlAttr
-  = QuotedAttr (EitherMeta T.Text) QuotedValue
+  = QuotedAttr (EitherMeta T.Text) (EitherMeta QuotedValue)
   | UnquotedAttr (EitherMeta T.Text) (EitherMeta T.Text)
   | EmptyAttr T.Text
   deriving (Eq, Show)

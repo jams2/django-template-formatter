@@ -113,11 +113,10 @@ voidIdent =
       <|> string' "command"
 
 eitherMeta :: Parser a -> Parser (EitherMeta a)
-eitherMeta p = Meta <$> (try metaNode) <|> Node <$> p
-
-eitherMetaAttrName :: Parser (EitherMeta T.Text)
-eitherMetaAttrName =
-  eitherMeta attrName <?> "HTML attribute name or template node"
+eitherMeta p =
+  Meta
+    <$> try (metaNode <?> "template node")
+      <|> (Node <$> p)
 
 attrName :: Parser T.Text
 attrName = lexeme $ T.pack <$> some (satisfy attrNameChar)
@@ -131,6 +130,8 @@ attrName = lexeme $ T.pack <$> some (satisfy attrNameChar)
         && c /= '='
         && isAscii c
 
+-- This doesn't need EitherMeta as the parser that calls
+-- it (elementAttrs) is EitherMeta.
 emptyAttr :: Parser HtmlAttr
 emptyAttr = EmptyAttr <$> attrName <?> "empty element attribute"
 
@@ -144,10 +145,10 @@ unquotedAttr =
   )
     <?> "unquoted element attribute"
   where
-    name = eitherMetaAttrName <?> "unquoted attribute name"
+    name = eitherMeta (attrName <?> "unquoted attribute name")
     unquotedValue =
       lexeme $
-        (eitherMeta concreteValue <?> "unquoted attribute value")
+        eitherMeta (concreteValue <?> "unquoted attribute value")
     concreteValue = T.pack <$> some (satisfy unquotedValueChar)
     unquotedValueChar c =
       not (isSpace c)
@@ -188,9 +189,9 @@ quotedValue = do
 quotedAttr :: Parser HtmlAttr
 quotedAttr =
   ( lexeme $ do
-      name <- eitherMetaAttrName
+      name <- eitherMeta (attrName <?> "HTML attribute name")
       _ <- attrEq
-      value <- quotedValue
+      value <- eitherMeta (quotedValue <?> "quoted attribute value")
       return $ QuotedAttr name value
   )
     <?> "quoted element attribute"
