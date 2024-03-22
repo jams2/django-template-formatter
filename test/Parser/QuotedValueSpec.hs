@@ -39,35 +39,35 @@ spec = do
           `shouldBe` Just
             ( QuotedValue
                 DoubleQuote
-                [Node "foo ", Meta (TemplateVar (PyVar "bar"))]
+                [Node "foo ", Meta (tVarMeta "bar")]
             )
       it "parses a string with a meta node only" $ do
         parse' "\"{{ bar }}\""
           `shouldBe` Just
             ( QuotedValue
                 DoubleQuote
-                [Meta (TemplateVar (PyVar "bar"))]
+                [Meta (tVarMeta "bar")]
             )
       it "parses a string with a meta node and a normal node" $ do
         parse' "\"{{ bar }} baz\""
           `shouldBe` Just
             ( QuotedValue
                 DoubleQuote
-                [Meta (TemplateVar (PyVar "bar")), Node " baz"]
+                [Meta (tVarMeta "bar"), Node " baz"]
             )
       it "parses whitespace around a meta node" $ do
         parse' "'    {{ bar }}    '"
           `shouldBe` Just
             ( QuotedValue
                 SingleQuote
-                [Node "    ", Meta (TemplateVar (PyVar "bar")), Node "    "]
+                [Node "    ", Meta (tVarMeta "bar"), Node "    "]
             )
       it "parses multiple meta nodes" $ do
         parse' "\"{{ bar }}{{ baz }}\""
           `shouldBe` Just
             ( QuotedValue
                 DoubleQuote
-                [Meta (TemplateVar (PyVar "bar")), Meta (TemplateVar (PyVar "baz"))]
+                [Meta (tVarMeta "bar"), Meta (tVarMeta "baz")]
             )
       it "parses multiple combinations of text and meta nodes, not ended by meta" $ do
         parse' "\"foo {{ bar }} baz {{ qux }} foo\""
@@ -75,9 +75,9 @@ spec = do
             ( QuotedValue
                 DoubleQuote
                 [ Node "foo ",
-                  Meta (TemplateVar (PyVar "bar")),
+                  Meta (tVarMeta "bar"),
                   Node " baz ",
-                  Meta (TemplateVar (PyVar "qux")),
+                  Meta (tVarMeta "qux"),
                   Node " foo"
                 ]
             )
@@ -87,8 +87,8 @@ spec = do
             ( QuotedValue
                 DoubleQuote
                 [ Node "foo ",
-                  Meta (TemplateVar (PyVar "bar")),
+                  Meta (tVarMeta "bar"),
                   Node " baz ",
-                  Meta (TemplateVar (PyVar "qux"))
+                  Meta (tVarMeta "qux")
                 ]
             )

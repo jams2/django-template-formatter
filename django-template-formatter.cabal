@@ -63,6 +63,8 @@ test-suite django-template-formatter-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Parser.FilterSpec
+      Parser.HtmlVoidElementSpec
       Parser.PyIdentSpec
       Parser.PyVarSpec
       Parser.QuotedValueSpec

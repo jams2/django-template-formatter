@@ -15,6 +15,9 @@ module Tree
     EitherMeta (..),
     PyVal (..),
     PyIdent,
+    Filter (..),
+    tVarMeta,
+    tVarFilterMeta,
   )
 where
 
@@ -27,22 +30,20 @@ data HtmlNode
   | TextNode T.Text
   deriving (Eq, Show)
 
-data HtmlVoidElement = HtmlVoidElement
-  { voidElementName :: EitherMeta T.Text,
-    voidElementAttrs :: [EitherMeta HtmlAttr]
-  }
+data HtmlVoidElement
+  = HtmlVoidElement
+      (EitherMeta T.Text) -- element name
+      [EitherMeta HtmlAttr] -- attrs
+      Bool -- was closed
   deriving (Eq, Show)
 
-data HtmlElementOpener = HtmlElementOpener
-  { openerName :: EitherMeta T.Text,
-    openerAttrs :: [EitherMeta HtmlAttr]
-  }
+data HtmlElementOpener
+  = HtmlElementOpener
+      (EitherMeta T.Text) -- element name
+      [EitherMeta HtmlAttr] -- attrs
   deriving (Eq, Show)
 
-data HtmlElementCloser = HtmlElementCloser
-  { closerName :: EitherMeta T.Text,
-    closerAttrs :: [EitherMeta HtmlAttr]
-  }
+data HtmlElementCloser = HtmlElementCloser (EitherMeta T.Text)
   deriving (Eq, Show)
 
 data QuoteType = SingleQuote | DoubleQuote
@@ -65,10 +66,20 @@ data EitherMeta a
 data MetaNode
   = TemplateTag PyIdent
   | TemplateBlock PyIdent
-  | TemplateVar PyVal
-  | TemplateFilter PyVal PyVal (Maybe PyVal)
+  | TemplateVar (Either Filter PyVal)
+  | TemplateFilter Filter
   | BlockComment T.Text
   | LineComment T.Text
+  deriving (Eq, Show)
+
+tVarMeta :: PyIdent -> MetaNode
+tVarMeta = TemplateVar . Right . PyVar
+
+tVarFilterMeta :: Filter -> MetaNode
+tVarFilterMeta = TemplateVar . Left
+
+data Filter
+  = Filter (Either PyVal Filter) PyIdent (Maybe PyVal)
   deriving (Eq, Show)
 
 type PyIdent = T.Text
@@ -77,4 +88,5 @@ data PyVal
   = PyVar PyIdent
   | PyGetAttr PyVal PyVal
   | PyString T.Text
+  | PyNumber T.Text
   deriving (Eq, Show)

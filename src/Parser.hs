@@ -10,6 +10,7 @@ module Parser
     pyVal,
     pyVar,
     pyString,
+    templateFilter,
     templateVar,
     htmlVoidElement,
     metaNode,
@@ -20,6 +21,7 @@ module Parser
 where
 
 import Control.Applicative.Combinators qualified as C
+import Control.Applicative.Combinators.NonEmpty qualified as CNE
 import Data.Char (isAlpha, isAscii, isDigit, isSpace)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as T
@@ -32,11 +34,14 @@ import Prelude hiding (takeWhile)
 
 type Parser = Parsec Void T.Text
 
+someNE :: Parser a -> Parser (NonEmpty a)
+someNE = CNE.some
+
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
 
-pyIndex :: Parser T.Text
-pyIndex = lexeme $ takeWhile1P (Just "digit") isDigit
+integer :: Parser T.Text
+integer = lexeme $ takeWhile1P (Just "digit") isDigit
 
 -- Combined parser for any string literal
 stringLiteral :: Parser T.Text
@@ -58,8 +63,11 @@ pyIdent =
     initialChar c = isAlpha c || c == '_'
     subsequentChars c = isAlpha c || isDigit c || c == '_'
 
+pyNumber :: Parser PyVal
+pyNumber = PyNumber <$> integer
+
 pyAttr :: Parser PyVal
-pyAttr = PyVar <$> (pyIndex <|> pyIdent)
+pyAttr = pyNumber <|> PyVar <$> pyIdent
 
 dot :: Parser Char
 dot = char '.'
@@ -70,27 +78,45 @@ pyVar = PyVar <$> pyIdent
 pyString :: Parser PyVal
 pyString = PyString <$> stringLiteral
 
+foldlNodeNe :: (a -> a -> a) -> NonEmpty a -> a
+foldlNodeNe f xs = case xs of
+  (x :| []) -> x
+  (x :| [y]) -> f x y
+  (x :| (y : ys)) -> fold' (f x y) ys
+  where
+    fold' acc [] = acc
+    fold' acc (z : zs) = fold' (f acc z) zs
+
 pyRef :: Parser PyVal
 pyRef =
-  lexeme $
-    fold <$> do
-      first <- pyVar <?> "variable reference"
-      rest <- many ((dot *> pyAttr) <?> "attribute lookup")
-      return $ first :| rest
+  foldlNodeNe PyGetAttr <$> do
+    first <- pyVar <?> "variable reference"
+    rest <- many ((dot *> pyAttr) <?> "attribute lookup")
+    return $ first :| rest
+
+templateFilter :: Parser Filter
+templateFilter = do
+  rand <- pyVal
+  rest <- someNE suffix
+  return $ foldFilters rand rest
   where
-    fold :: NonEmpty PyVal -> PyVal
-    fold (a :| []) = a
-    fold (a :| [b]) = PyGetAttr a b
-    fold (a :| (b : rest)) = fold' (PyGetAttr a b) rest
-    fold' :: PyVal -> [PyVal] -> PyVal
-    fold' acc [] = acc
-    fold' acc (a : rest) = fold' (PyGetAttr acc a) rest
+    suffix = do
+      name <- string "|" *> pyIdent
+      arg <- optional (string ":" *> pyVal)
+      return (name, arg)
+    foldFilters :: PyVal -> NonEmpty (PyIdent, Maybe PyVal) -> Filter
+    foldFilters rand ((f, arg) :| xs) = fold' (Filter (Left rand) f arg) xs
+    fold' :: Filter -> [(PyIdent, Maybe PyVal)] -> Filter
+    fold' x [] = x
+    fold' x ((f, arg) : xs) = fold' (Filter (Right x) f arg) xs
 
 pyVal :: Parser PyVal
-pyVal = pyRef <|> pyString
+pyVal = pyRef <|> pyString <|> pyNumber
 
 templateVar :: Parser MetaNode
-templateVar = TemplateVar <$> ("{{" *> hspace *> pyVal <* hspace <* "}}")
+templateVar = TemplateVar <$> ("{{" *> hspace *> node <* hspace <* "}}")
+  -- TODO: implement this without backtracking
+  where node = (Left <$> try templateFilter) <|> (Right <$> pyVal)
 
 voidIdent :: Parser T.Text
 voidIdent =
@@ -215,5 +241,10 @@ htmlVoidElement = lexeme $ do
   _ <- lexeme $ string "<"
   name <- eitherMeta voidIdent <?> "void element name"
   attrs <- elementAttrs <?> "void element attributes"
-  _ <- lexeme $ string ">" <|> string "/>"
-  return $ HtmlVoidElement {voidElementName = name, voidElementAttrs = attrs}
+  wasClosed <- closingTag name
+  return $ HtmlVoidElement name attrs wasClosed
+  where
+    closingTag :: EitherMeta T.Text -> Parser Bool
+    closingTag name = case name of
+      Meta _ -> string "/>" *> pure True
+      Node _ -> (string "/>" *> pure True) <|> (string ">" *> pure False)
